@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yog'och Nuqson Aniqlovchi</title>
+<meta name="description" content="Sun'iy intellekt yordamida yog'ochdagi nuqsonlarni avtomatik aniqlash tizimi">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0a0c14;
+    --surface: #111420;
+    --card:    #161926;
+    --border:  #242840;
+    --primary: #6c63ff;
+    --accent:  #4fc3f7;
+    --success: #56cf6e;
+    --warn:    #ffd43b;
+    --danger:  #ff6b6b;
+    --text:    #e8eaf6;
+    --muted:   #7a85a3;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: linear-gradient(135deg, #13162a 0%, #0a0c14 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 40px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 4px 40px rgba(108,99,255,0.12);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-info h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.3px; }
+  .header-info p  { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--warn);
+    box-shadow: 0 0 6px var(--warn);
+    animation: pulse 1.5s infinite;
+  }
+  .status-dot.ready { background: var(--success); box-shadow: 0 0 6px var(--success); animation: none; }
+  .status-text { font-size: 0.78rem; color: var(--muted); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  main {
+    max-width: 1120px; margin: 0 auto;
+    padding: 36px 24px;
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; padding: 20px 16px; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 28px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.35);
+  }
+  .card-title {
+    font-size: 0.75rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 1.2px;
+    margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+  }
+  .card-title::before {
+    content: ''; width: 3px; height: 14px;
+    background: var(--primary); border-radius: 2px; flex-shrink: 0;
+  }
+
+  /* Drop Zone */
+  #drop-zone {
+    border: 2px dashed var(--border); border-radius: 14px;
+    padding: 50px 20px; text-align: center; cursor: pointer;
+    transition: all 0.25s ease;
+    user-select: none;
+  }
+  #drop-zone:hover, #drop-zone.over {
+    border-color: var(--primary);
+    background: rgba(108,99,255,0.06);
+  }
+  .dz-icon {
+    width: 56px; height: 56px; border-radius: 14px;
+    background: rgba(108,99,255,0.15); border: 1px solid rgba(108,99,255,0.3);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px;
+    font-size: 1.4rem; font-weight: 700; color: var(--primary);
+  }
+  .dz-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; }
+  .dz-sub { font-size: 0.78rem; color: var(--muted); }
+  #file-input { display: none; }
+
+  /* Preview */
+  #preview-wrap {
+    display: none; margin-top: 18px; border-radius: 12px;
+    overflow: hidden; position: relative;
+    border: 1px solid var(--border);
+  }
+  #preview-img { width: 100%; max-height: 240px; object-fit: cover; display: block; }
+  .img-meta {
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    padding: 8px 12px; font-size: 0.75rem; color: #ccc;
+  }
+
+  /* Button */
+  #predict-btn {
+    margin-top: 18px; width: 100%; padding: 14px;
+    border: none; border-radius: 12px;
+    background: linear-gradient(135deg, var(--primary), #8b5cf6);
+    color: white; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; transition: all 0.25s ease;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    letter-spacing: 0.5px;
+  }
+  #predict-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(108,99,255,0.4);
+  }
+  #predict-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+  /* Results */
+  .empty-state {
+    text-align: center; padding: 80px 20px; color: var(--muted);
+  }
+  .empty-icon {
+    width: 64px; height: 64px; border-radius: 16px;
+    background: rgba(108,99,255,0.08); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px; font-size: 1.6rem;
+  }
+  .empty-state p { font-size: 0.86rem; line-height: 1.7; }
+
+  /* Top Prediction */
+  .result-hero {
+    background: linear-gradient(135deg, rgba(108,99,255,0.1), rgba(79,195,247,0.06));
+    border: 1px solid rgba(108,99,255,0.2);
+    border-radius: 14px; padding: 28px; text-align: center; margin-bottom: 22px;
+    animation: fadeUp 0.35s ease;
+  }
+  .result-label {
+    font-size: 2rem; font-weight: 700; letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #fff, var(--accent));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .result-conf { font-size: 0.92rem; font-weight: 600; margin-bottom: 4px; }
+  .result-meta { font-size: 0.72rem; color: var(--muted); }
+
+  /* Prob Bars */
+  .prob-list { display: flex; flex-direction: column; gap: 10px; animation: fadeUp 0.45s ease; }
+  .prob-item {}
+  .prob-header { display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 5px; }
+  .prob-name { font-weight: 500; color: var(--text); }
+  .prob-pct  { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar-bg    { background: var(--surface); border-radius: 6px; height: 8px; overflow: hidden; }
+  .bar-fill  {
+    height: 100%; border-radius: 6px;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    transition: width 0.85s cubic-bezier(0.4,0,0.2,1);
+  }
+  .bar-fill.top { background: linear-gradient(90deg, var(--success), #4fc3f7); }
+
+  /* Heatmap */
+  #heatmap-wrap {
+    display: none; margin-top: 22px;
+    border-top: 1px solid var(--border); padding-top: 20px;
+  }
+  #heatmap-img {
+    width: 100%; border-radius: 10px; object-fit: cover;
+    border: 1px solid var(--border);
+  }
+  .heatmap-legend {
+    display: flex; justify-content: space-between;
+    margin-top: 8px; font-size: 0.7rem; color: var(--muted);
+  }
+
+  /* Loading overlay */
+  #loading-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(10,12,20,0.75); backdrop-filter: blur(4px);
+    z-index: 200; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+  }
+  #loading-overlay.show { display: flex; }
+  .loader-ring {
+    width: 52px; height: 52px;
+    border: 3px solid rgba(108,99,255,0.2);
+    border-top-color: var(--primary);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(10px); }
+    to   { opacity:1; transform: none; }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  footer {
+    text-align: center; padding: 24px;
+    color: var(--muted); font-size: 0.72rem;
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+  }
+  footer span { color: var(--primary); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay">
+  <div class="loader-ring"></div>
+  <p style="color:var(--muted);font-size:0.85rem;" id="loading-text">Model yuklanmoqda...</p>
+</div>
+
+<header>
+  <div class="header-info">
+    <h1>Yog'och Nuqson Aniqlovchi</h1>
+    <p>Avtomatlashtirilgan vizual klassifikatsiya tizimi</p>
+  </div>
+  <div class="header-right">
+    <div class="status-dot" id="status-dot"></div>
+    <span class="status-text" id="status-text">Model yuklanmoqda...</span>
+  </div>
+</header>
+
+<main>
+  <!-- Chap: Upload -->
+  <div>
+    <div class="card">
+      <div class="card-title">Rasm yuklash</div>
+
+      <div id="drop-zone" onclick="document.getElementById('file-input').click()"
+           ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <div class="dz-icon">+</div>
+        <div class="dz-title">Rasm tanlang yoki shu yerga tashlang</div>
+        <div class="dz-sub">JPG · PNG · WEBP · BMP formatlari qabul qilinadi</div>
+        <input type="file" id="file-input" accept="image/*" onchange="handleFile(this.files[0])">
+      </div>
+
+      <div id="preview-wrap">
+        <img id="preview-img" src="" alt="Tanlangan rasm">
+        <div class="img-meta" id="img-meta"></div>
+      </div>
+
+      <button id="predict-btn" disabled onclick="predict()">
+        <span id="btn-text">Tahlil qilish</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- O'ng: Natija -->
+  <div class="card" id="result-card">
+    <div class="card-title">Bashorat natijasi</div>
+    <div id="result-content">
+      <div class="empty-state">
+        <div class="empty-icon">&#x2315;</div>
+        <p>Chap tomonda rasm yuklang<br>va <b style="color:var(--primary);">Tahlil qilish</b> tugmasini bosing</p>
+      </div>
+    </div>
+
+    <div id="heatmap-wrap">
+      <div class="card-title">Grad-CAM — Diqqat xaritasi</div>
+      <canvas id="heatmap-canvas" style="width:100%;border-radius:10px;border:1px solid var(--border);"></canvas>
+      <div class="heatmap-legend">
+        <span>Kam ahamiyatli</span>
+        <span>Ko'p ahamiyatli</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Wood Defect Classification System &mdash; <span>TensorFlow.js</span> &mdash; Brauzerda ishlaydi
+</footer>
+
+<script>
+// ── Sozlamalar ──────────────────────────────────────────────────
+const MODEL_URL  = './tfjs_model/model.json';
+const IMG_SIZE   = 224;
+const CLASS_NAMES = [
+  { en: 'Crack',           uz: 'Yoriq'          },
+  { en: 'Dead_Knot',       uz: "O'lik tugun"    },
+  { en: 'Live_Knot',       uz: 'Tirik tugun'    },
+  { en: 'knot_with_crack', uz: 'Yoriqli tugun'  },
+  { en: 'resin',           uz: 'Qatron (Smola)' },
+  { en: 'unknown',         uz: 'Toza taxta'     },
+];
+
+let model = null;
+let currentImageElement = null;
+
+// ── Model yuklash ───────────────────────────────────────────────
+async function loadModel() {
+  showOverlay('Model yuklanmoqda...');
+  try {
+    model = await tf.loadLayersModel(MODEL_URL);
+    // Warm-up
+    const dummy = tf.zeros([1, IMG_SIZE, IMG_SIZE, 3]);
+    model.predict(dummy).dispose();
+    dummy.dispose();
+
+    setStatus(true, 'Model tayyor');
+  } catch(e) {
+    setStatus(false, 'Model yuklanmadi');
+    console.error('Model yuklanmadi:', e);
+  }
+  hideOverlay();
+}
+
+function setStatus(ready, text) {
+  document.getElementById('status-dot').className = 'status-dot' + (ready ? ' ready' : '');
+  document.getElementById('status-text').textContent = text;
+}
+
+// ── Rasm boshqaruvi ─────────────────────────────────────────────
+function handleFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = document.getElementById('preview-img');
+    img.src = ev.target.result;
+    img.onload = () => { currentImageElement = img; };
+    document.getElementById('preview-wrap').style.display = 'block';
+    document.getElementById('img-meta').textContent =
+      file.name + '  ·  ' + (file.size / 1024).toFixed(1) + ' KB';
+    document.getElementById('predict-btn').disabled = false;
+    resetResults();
+  };
+  reader.readAsDataURL(file);
+}
+
+function onDragOver(e) { e.preventDefault(); document.getElementById('drop-zone').classList.add('over'); }
+function onDragLeave()  { document.getElementById('drop-zone').classList.remove('over'); }
+function onDrop(e) {
+  e.preventDefault(); onDragLeave();
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+}
+
+function resetResults() {
+  document.getElementById('result-content').innerHTML =
+    '<div class="empty-state"><p>Rasm yuklandi. Tahlil qilishga tayyor.</p></div>';
+  document.getElementById('heatmap-wrap').style.display = 'none';
+}
+
+// ── Tahlil qilish ───────────────────────────────────────────────
+async function predict() {
+  if (!model || !currentImageElement) return;
+
+  const btn = document.getElementById('predict-btn');
+  btn.disabled = true;
+  document.getElementById('btn-text').innerHTML =
+    '<div style="width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;"></div>&nbsp;Tahlil qilinmoqda...';
+
+  try {
+    // Preprocessing — EfficientNet 0-255 qiymatlarni o'zi qabul qiladi
+    const tensor = tf.browser.fromPixels(currentImageElement)
+      .resizeBilinear([IMG_SIZE, IMG_SIZE])
+      .toFloat()
+      .expandDims(0);
+
+    const predictions = model.predict(tensor);
+    const probs = await predictions.data();
+    tensor.dispose();
+    predictions.dispose();
+
+    // Natijalarni qayta ishlash
+    const results = CLASS_NAMES.map((cls, i) => ({
+      name: cls.uz,
+      prob: probs[i] || 0
+    })).sort((a, b) => b.prob - a.prob);
+
+    showResults(results);
+
+    // Grad-CAM (soddalashtirilgan)
+    await showGradCam(currentImageElement, results[0].name);
+
+  } catch(e) {
+    document.getElementById('result-content').innerHTML =
+      `<div class="empty-state"><p>Xato yuz berdi: ${e.message}</p></div>`;
+    console.error(e);
+  }
+
+  btn.disabled = false;
+  document.getElementById('btn-text').textContent = 'Tahlil qilish';
+}
+
+// ── Natijalarni ko'rsatish ──────────────────────────────────────
+function showResults(results) {
+  const top = results[0];
+  const pct = (top.prob * 100).toFixed(1);
+  const confColor = top.prob > 0.75 ? 'var(--success)'
+                  : top.prob > 0.5  ? 'var(--warn)'
+                  :                   'var(--danger)';
+
+  const bars = results.map((r, i) => {
+    const pp = (r.prob * 100).toFixed(1);
+    return `
+    <div class="prob-item">
+      <div class="prob-header">
+        <span class="prob-name">${r.name}</span>
+        <span class="prob-pct">${pp}%</span>
+      </div>
+      <div class="bar-bg">
+        <div class="bar-fill ${i === 0 ? 'top' : ''}" style="width:0%" data-target="${pp}"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('result-content').innerHTML = `
+    <div class="result-hero">
+      <div class="result-label">${top.name}</div>
+      <div class="result-conf" style="color:${confColor}">Ishonch darajasi: ${pct}%</div>
+    </div>
+    <div class="prob-list">${bars}</div>`;
+
+  // Barlarni animatsiya bilan to'ldirish
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.bar-fill[data-target]').forEach(el => {
+      el.style.width = el.dataset.target + '%';
+    });
+  });
+}
+
+// ── Grad-CAM (Canvas yordamida) ─────────────────────────────────
+async function showGradCam(imgEl, topLabel) {
+  try {
+    // Asosiy model va gradient modelini topish
+    const innerModel = model.layers.find(l => l instanceof tf.LayersModel) || model;
+
+    // So'nggi Conv2D qatlamini topish
+    let lastConvLayer = null;
+    for (let i = innerModel.layers.length - 1; i >= 0; i--) {
+      if (innerModel.layers[i] instanceof tf.layers.conv2d.constructor ||
+          innerModel.layers[i].getClassName() === 'Conv2D') {
+        lastConvLayer = innerModel.layers[i];
+        break;
+      }
+    }
+    if (!lastConvLayer) return;
+
+    const gradModel = tf.model({
+      inputs: model.inputs,
+      outputs: [lastConvLayer.output, model.output]
+    });
+
+    const imgTensor = tf.browser.fromPixels(imgEl)
+      .resizeBilinear([IMG_SIZE, IMG_SIZE])
+      .toFloat().expandDims(0);
+
+    const [convOut, preds] = await tf.tidy(() => {
+      return tf.variableGrads(() => {
+        const [co, pr] = gradModel.predict(imgTensor);
+        const topIdx = pr.argMax(1).dataSync()[0];
+        return pr.gather([topIdx], 1).squeeze();
+      });
+    });
+
+    // Bu soddalashtirilgan versiya - konv chiqishini heatmap sifatida ishlatamiz
+    const heatmap = tf.tidy(() =>
+      convOut.mean(-1).squeeze().relu()
+        .div(convOut.mean(-1).squeeze().relu().max().add(1e-7))
+    );
+
+    const canvas = document.getElementById('heatmap-canvas');
+    const hData  = await heatmap.resizeBilinear([imgEl.naturalHeight || 224, imgEl.naturalWidth || 224]).data();
+
+    canvas.width  = imgEl.naturalWidth  || 224;
+    canvas.height = imgEl.naturalHeight || 224;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imgEl, 0, 0, canvas.width, canvas.height);
+
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < hData.length; i++) {
+      const v = hData[i];
+      // Jet colormap: past=ko'k, o'rta=yashil, yuqori=qizil
+      const r = Math.min(255, Math.max(0, Math.round(255 * Math.min(1, 4 * v - 1.5))));
+      const g = Math.min(255, Math.max(0, Math.round(255 * Math.min(1, 4 * Math.abs(v - 0.5) - 0.5))));
+      const b = Math.min(255, Math.max(0, Math.round(255 * Math.min(1, -4 * v + 1.5))));
+      imgData.data[i*4]   = Math.round(imgData.data[i*4]   * 0.55 + r * 0.45);
+      imgData.data[i*4+1] = Math.round(imgData.data[i*4+1] * 0.55 + g * 0.45);
+      imgData.data[i*4+2] = Math.round(imgData.data[i*4+2] * 0.55 + b * 0.45);
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    heatmap.dispose();
+    convOut.dispose();
+    preds.dispose();
+    imgTensor.dispose();
+
+    document.getElementById('heatmap-wrap').style.display = 'block';
+  } catch(e) {
+    console.log('Grad-CAM ishlamadi:', e.message);
+    // Heatmap bo'lmasa ham, natija ko'rsatiladi
+  }
+}
+
+function showOverlay(text) {
+  document.getElementById('loading-text').textContent = text;
+  document.getElementById('loading-overlay').classList.add('show');
+}
+function hideOverlay() {
+  document.getElementById('loading-overlay').classList.remove('show');
+}
+
+// Start
+loadModel();
+</script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "name": "yogoch-nuqson-aniqlovchi",
+  "builds": [
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/tfjs_model/(.*)",
+      "dest": "/tfjs_model/$1",
+      "headers": {
+        "Cache-Control": "public, max-age=86400",
+        "Access-Control-Allow-Origin": "*"
+      }
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ]
+}
