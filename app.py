@@ -1,5 +1,6 @@
 import os
 import io
+import gc
 import traceback
 import numpy as np
 from flask import Flask, request, jsonify, send_from_directory
@@ -15,7 +16,10 @@ def init_model():
     try:
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
         import tensorflow as tf
-        tf.config.set_visible_devices([], 'GPU')  # CPU only, GPU yo'q
+        # RAM tejash: 1 thread, GPU yo'q
+        tf.config.set_visible_devices([], 'GPU')
+        tf.config.threading.set_inter_op_parallelism_threads(1)
+        tf.config.threading.set_intra_op_parallelism_threads(1)
 
         model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'best_finetuned_fixed.keras')
         print(f"Model path: {model_path}")
@@ -81,6 +85,7 @@ def predict():
         img_array = np.expand_dims(img_array, axis=0)
 
         predictions = model.predict(img_array, verbose=0)[0]
+        gc.collect()  # Intermediate tensorlarni tozalash
 
         results = []
         for name, prob in zip(CLASS_NAMES, predictions):
