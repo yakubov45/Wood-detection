@@ -1,36 +1,37 @@
 import os
 import io
-import json
 import traceback
 import numpy as np
 from flask import Flask, request, jsonify, send_from_directory
 
 app = Flask(__name__, static_folder='.')
 
-# Model global o'zgaruvchi
+# ─── Model startup da yuklanadi ───────────────────────────────────────────────
 model = None
 model_error = None
 
-def load_model():
+def init_model():
     global model, model_error
-    if model is not None:
-        return model, None
-    if model_error is not None:
-        return None, model_error
     try:
         import tensorflow as tf
-        print("TensorFlow versiyasi:", tf.__version__)
-        model_path = os.path.join(os.path.dirname(__file__), 'best_finetuned_fixed.keras')
-        print(f"Model yuklanmoqda: {model_path}")
-        print(f"Fayl mavjudmi: {os.path.exists(model_path)}")
+        print(f"TensorFlow: {tf.__version__}")
+        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'best_finetuned_fixed.keras')
+        print(f"Model path: {model_path}")
+        print(f"Fayl bor: {os.path.exists(model_path)}")
         model = tf.keras.models.load_model(model_path)
-        print("Model muvaffaqiyatli yuklandi!")
-        return model, None
+        print("✅ Model muvaffaqiyatli yuklandi!")
     except Exception as e:
         model_error = str(e)
+        print(f"❌ Model xatosi: {e}")
         traceback.print_exc()
-        return None, model_error
 
+# Startup da yukla
+print("=" * 50)
+print("Model yuklanmoqda (startup)...")
+init_model()
+print("=" * 50)
+
+# ─── Kategoriyalar ────────────────────────────────────────────────────────────
 CLASS_NAMES = [
     'Crack (Yoriq)',
     'Knot (Tugun)',
@@ -40,23 +41,24 @@ CLASS_NAMES = [
     "Normal (Sog'lom)"
 ]
 
+# ─── Routes ───────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
     return send_from_directory('.', 'index.html')
 
 @app.route('/health')
 def health():
-    """Server holati tekshirish"""
-    m, err = load_model()
     return jsonify({
-        'status': 'ok' if m else 'model_error',
-        'model_loaded': m is not None,
-        'error': err
+        'status': 'ok' if model else 'error',
+        'model_loaded': model is not None,
+        'error': model_error
     })
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    # Fayl borligini tekshirish
+    if model is None:
+        return jsonify({'success': False, 'error': f'Model yuklanmadi: {model_error}'}), 500
+
     if 'file' not in request.files:
         return jsonify({'success': False, 'error': 'Fayl topilmadi'}), 400
 
@@ -67,22 +69,15 @@ def predict():
     try:
         from PIL import Image
 
-        # Modalni yuklash
-        m, err = load_model()
-        if m is None:
-            return jsonify({'success': False, 'error': f'Model yuklanmadi: {err}'}), 500
-
-        # Rasmni o'qish
-        img_bytes = file.read()
-        img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+        # Rasm preprocessing — model ichida Rescaling(1/255) bor, /255 qilmaymiz
+        img = Image.open(io.BytesIO(file.read())).convert('RGB')
         img = img.resize((224, 224))
-        img_array = np.array(img, dtype=np.float32)  # Model ichida Rescaling(1/255) bor!
+        img_array = np.array(img, dtype=np.float32)  # Raw [0-255]
         img_array = np.expand_dims(img_array, axis=0)
 
         # Bashorat
-        predictions = m.predict(img_array, verbose=0)[0]
+        predictions = model.predict(img_array, verbose=0)[0]
 
-        # Natijalar
         results = []
         for name, prob in zip(CLASS_NAMES, predictions):
             results.append({
@@ -90,14 +85,12 @@ def predict():
                 'probability': float(prob),
                 'percentage': round(float(prob) * 100, 1)
             })
-
         results.sort(key=lambda x: x['probability'], reverse=True)
-        top = results[0]
 
         return jsonify({
             'success': True,
-            'prediction': top['class'],
-            'confidence': top['percentage'],
+            'prediction': results[0]['class'],
+            'confidence': results[0]['percentage'],
             'all_results': results
         })
 
@@ -105,7 +98,6 @@ def predict():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# Barcha boshqa xatolar uchun JSON javob
 @app.errorhandler(404)
 def not_found(e):
     return jsonify({'success': False, 'error': 'Not found'}), 404
