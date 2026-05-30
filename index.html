@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Yog'och Nuqson Aniqlovchi</title>
+  <title>Wood Defect Classifier</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -13,6 +13,39 @@
       color: #e2e8f0;
       min-height: 100vh;
     }
+
+    /* ── Loading overlay ── */
+    #modelLoading {
+      position: fixed; inset: 0;
+      background: rgba(10,15,30,0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      gap: 1.2rem;
+    }
+    #modelLoading.hidden { display: none; }
+    .spinner {
+      width: 52px; height: 52px;
+      border: 4px solid #334155;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #modelLoading h2 { font-size: 1.1rem; color: #f1f5f9; }
+    #modelLoading p  { font-size: 0.82rem; color: #64748b; }
+    #modelStatus {
+      font-size: 0.78rem;
+      color: #6366f1;
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 20px;
+      padding: 0.3rem 1rem;
+      margin-top: 0.5rem;
+    }
+
     header {
       background: linear-gradient(135deg, #1e293b, #0f172a);
       border-bottom: 1px solid #334155;
@@ -23,6 +56,18 @@
     }
     header h1 { font-size: 1.4rem; font-weight: 700; color: #f1f5f9; }
     header p { font-size: 0.8rem; color: #94a3b8; }
+    /* Model status badge in header */
+    #headerStatus {
+      margin-left: auto;
+      font-size: 0.75rem;
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+    #headerStatus.loading { background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); }
+    #headerStatus.ready   { background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+    #headerStatus.error   { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+
     .container {
       max-width: 1100px;
       margin: 2rem auto;
@@ -90,7 +135,6 @@
     .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 25px rgba(99,102,241,0.4); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-    /* Natija */
     .result-empty {
       display: flex;
       flex-direction: column;
@@ -126,7 +170,7 @@
     .bar-item { margin-bottom: 0.8rem; }
     .bar-header { display: flex; justify-content: space-between; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem; }
     .bar-track { background: #1e293b; border-radius: 4px; height: 6px; overflow: hidden; }
-    .bar-fill { height: 100%; background: linear-gradient(90deg, #6366f1, #a78bfa); border-radius: 4px; transition: width 0.8s ease; }
+    .bar-fill { height: 100%; background: linear-gradient(90deg, #334155, #475569); border-radius: 4px; transition: width 0.8s ease; }
     .bar-fill.top { background: linear-gradient(90deg, #6366f1, #818cf8); }
 
     .status {
@@ -144,60 +188,104 @@
   </style>
 </head>
 <body>
+
+<!-- Model loading overlay -->
+<div id="modelLoading">
+  <div class="spinner"></div>
+  <h2>Model yuklanmoqda...</h2>
+  <p>Bu 10-30 sekund vaqt olishi mumkin</p>
+  <div id="modelStatus">⏳ Server bilan bog'lanilmoqda...</div>
+</div>
+
 <header>
   <div>
-    <h1>🌲 Yog'och Nuqson Aniqlovchi</h1>
-    <p>Avtomatlashtirilgan Klassifikatsiya Tizimi · EfficientNet-B0</p>
+    <h1>🌲 Wood Defect Classifier</h1>
+    <p>Automated Classification System · EfficientNet-B0</p>
   </div>
+  <div id="headerStatus" class="loading">⏳ Model yuklanmoqda</div>
 </header>
 
 <div class="container">
-  <!-- Yuklash paneli -->
   <div class="card">
-    <h2>Rasm Yuklash</h2>
+    <h2>Upload Image</h2>
     <div class="upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
       <div class="icon">📷</div>
       <img id="preview" alt="Preview">
-      <p id="uploadText">Rasmni tanlash uchun shu yerni bosing</p>
+      <p id="uploadText">Click here to select an image</p>
       <small>JPG · PNG · WEBP · BMP</small>
     </div>
     <input type="file" id="fileInput" accept="image/*">
-    <button class="btn" id="analyzeBtn" onclick="analyze()" disabled>Tahlil qilish</button>
+    <button class="btn" id="analyzeBtn" onclick="analyze()" disabled>Analyze</button>
     <div id="status"></div>
   </div>
 
-  <!-- Natija paneli -->
   <div class="card">
-    <h2>Bashorat Natijasi</h2>
+    <h2>Prediction Result</h2>
     <div id="resultEmpty" class="result-empty">
       <div class="icon">🔍</div>
-      <p>Rasm yuklang va tahlil qiling</p>
+      <p>Upload an image and click Analyze</p>
     </div>
     <div id="resultContent" style="display:none">
       <div class="top-result">
-        <div class="label">Asosiy natija</div>
+        <div class="label">Top prediction</div>
         <div class="name" id="topClass">—</div>
         <div class="conf" id="topConf">—</div>
       </div>
-      <div class="result-label">Barcha kategoriyalar</div>
+      <div class="result-label">All categories</div>
       <div id="allBars"></div>
     </div>
   </div>
 </div>
 
-<footer>Wood Defect Classification System · EfficientNet-B0</footer>
+<footer>Wood Defect Classification System · EfficientNet-B0 · TFLite</footer>
 
 <script>
-  const fileInput = document.getElementById('fileInput');
-  const preview   = document.getElementById('preview');
+  const fileInput  = document.getElementById('fileInput');
+  const preview    = document.getElementById('preview');
   const uploadText = document.getElementById('uploadText');
   const analyzeBtn = document.getElementById('analyzeBtn');
+  const overlay    = document.getElementById('modelLoading');
+  const statusEl   = document.getElementById('modelStatus');
+  const headerBadge = document.getElementById('headerStatus');
 
+  // ── Model health check on page load ──────────────────────────────
+  async function checkModel() {
+    statusEl.textContent = '⏳ Server bilan bog\'lanilmoqda...';
+    let attempts = 0;
+    while (attempts < 30) {
+      try {
+        const res  = await fetch('/health');
+        const data = await res.json();
+        if (data.model_loaded) {
+          overlay.classList.add('hidden');
+          headerBadge.className = 'ready';
+          headerBadge.textContent = '✅ Model tayyor';
+          return;
+        } else if (data.error) {
+          statusEl.textContent = '❌ ' + data.error;
+          headerBadge.className = 'error';
+          headerBadge.textContent = '❌ Model xatosi';
+          overlay.innerHTML = `
+            <div style="font-size:2.5rem">❌</div>
+            <h2 style="color:#f87171">Model yuklanmadi</h2>
+            <p style="color:#64748b;max-width:400px;text-align:center">${data.error}</p>`;
+          return;
+        }
+      } catch(e) {
+        statusEl.textContent = '⏳ Server uyg\'onmoqda... (' + (attempts+1) + '/30)';
+      }
+      attempts++;
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    statusEl.textContent = '⚠️ Vaqt tugadi. Sahifani yangilang.';
+  }
+  checkModel();
+
+  // ── File input ────────────────────────────────────────────────────
   fileInput.addEventListener('change', e => {
     const file = e.target.files[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    preview.src = url;
+    preview.src = URL.createObjectURL(file);
     preview.style.display = 'block';
     uploadText.style.display = 'none';
     analyzeBtn.disabled = false;
@@ -206,7 +294,7 @@
     document.getElementById('status').innerHTML = '';
   });
 
-  // Drag & drop
+  // ── Drag & drop ───────────────────────────────────────────────────
   const dropZone = document.getElementById('dropZone');
   dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#6366f1'; });
   dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#334155'; });
@@ -220,54 +308,46 @@
     }
   });
 
+  // ── Analyze ───────────────────────────────────────────────────────
   async function analyze() {
     const file = fileInput.files[0];
     if (!file) return;
-
     analyzeBtn.disabled = true;
-    analyzeBtn.textContent = 'Tahlil qilinmoqda...';
+    analyzeBtn.textContent = 'Analyzing...';
     document.getElementById('status').innerHTML =
-      '<div class="status loading">⏳ Model tahlil qilmoqda...</div>';
+      '<div class="status loading">⏳ Model analyzing...</div>';
 
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const res = await fetch('/predict', { method: 'POST', body: formData });
+      const res  = await fetch('/predict', { method: 'POST', body: formData });
       const data = await res.json();
+      if (!data.success) throw new Error(data.error);
 
-      if (data.error) throw new Error(data.error);
-
-      // Natijani ko'rsatish
       document.getElementById('resultEmpty').style.display = 'none';
       document.getElementById('resultContent').style.display = 'block';
       document.getElementById('topClass').textContent = data.prediction;
-      document.getElementById('topConf').textContent = data.confidence.toFixed(1) + '%';
+      document.getElementById('topConf').textContent  = data.confidence.toFixed(1) + '%';
 
-      // Barlar
       const barsDiv = document.getElementById('allBars');
       barsDiv.innerHTML = '';
       data.all_results.forEach((r, i) => {
-        const isTop = i === 0;
         barsDiv.innerHTML += `
           <div class="bar-item">
-            <div class="bar-header">
-              <span>${r.class}</span>
-              <span>${r.percentage}%</span>
-            </div>
+            <div class="bar-header"><span>${r.class}</span><span>${r.percentage}%</span></div>
             <div class="bar-track">
-              <div class="bar-fill ${isTop ? 'top' : ''}" style="width:${r.percentage}%"></div>
+              <div class="bar-fill ${i===0?'top':''}" style="width:${r.percentage}%"></div>
             </div>
           </div>`;
       });
-
       document.getElementById('status').innerHTML = '';
     } catch (err) {
       document.getElementById('status').innerHTML =
-        `<div class="status error">❌ Xato: ${err.message}</div>`;
+        `<div class="status error">❌ Error: ${err.message}</div>`;
     } finally {
       analyzeBtn.disabled = false;
-      analyzeBtn.textContent = 'Tahlil qilish';
+      analyzeBtn.textContent = 'Analyze';
     }
   }
 </script>
