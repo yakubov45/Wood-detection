@@ -6,39 +6,43 @@ from flask import Flask, request, jsonify, send_from_directory
 
 app = Flask(__name__, static_folder='.')
 
-# ─── Model startup da yuklanadi ───────────────────────────────────────────────
-model = None
+# ─── TFLite Model ─────────────────────────────────────────────────────────────
+interpreter = None
+input_details = None
+output_details = None
 model_error = None
 
 def init_model():
-    global model, model_error
+    global interpreter, input_details, output_details, model_error
     try:
         import tensorflow as tf
-        print(f"TensorFlow: {tf.__version__}")
-        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'best_finetuned_fixed.keras')
-        print(f"Model path: {model_path}")
+        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model.tflite')
+        print(f"TFLite model: {model_path}")
         print(f"Fayl bor: {os.path.exists(model_path)}")
-        model = tf.keras.models.load_model(model_path)
-        print("✅ Model muvaffaqiyatli yuklandi!")
+
+        interpreter = tf.lite.Interpreter(model_path=model_path)
+        interpreter.allocate_tensors()
+        input_details  = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+        print(f"✅ TFLite yuklandi! Input: {input_details[0]['shape']}")
     except Exception as e:
         model_error = str(e)
         print(f"❌ Model xatosi: {e}")
         traceback.print_exc()
 
-# Startup da yukla
 print("=" * 50)
-print("Model yuklanmoqda (startup)...")
+print("TFLite model yuklanmoqda...")
 init_model()
 print("=" * 50)
 
 # ─── Kategoriyalar ────────────────────────────────────────────────────────────
 CLASS_NAMES = [
-    'Crack (Yoriq)',
-    'Knot (Tugun)',
-    'Knot with Crack (Tugunli yoriq)',
-    'Quartzite (Kvarsit)',
-    'Resin (Qatron)',
-    "Normal (Sog'lom)"
+    'Crack',
+    'Knot',
+    'Knot with Crack',
+    'Quartzite',
+    'Resin',
+    'Normal'
 ]
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
@@ -49,14 +53,14 @@ def index():
 @app.route('/health')
 def health():
     return jsonify({
-        'status': 'ok' if model else 'error',
-        'model_loaded': model is not None,
+        'status': 'ok' if interpreter else 'error',
+        'model_loaded': interpreter is not None,
         'error': model_error
     })
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    if model is None:
+    if interpreter is None:
         return jsonify({'success': False, 'error': f'Model yuklanmadi: {model_error}'}), 500
 
     if 'file' not in request.files:
@@ -69,14 +73,16 @@ def predict():
     try:
         from PIL import Image
 
-        # Rasm preprocessing — model ichida Rescaling(1/255) bor, /255 qilmaymiz
+        # Preprocessing — model ichida Rescaling(1/255) bor
         img = Image.open(io.BytesIO(file.read())).convert('RGB')
         img = img.resize((224, 224))
         img_array = np.array(img, dtype=np.float32)  # Raw [0-255]
         img_array = np.expand_dims(img_array, axis=0)
 
-        # Bashorat
-        predictions = model.predict(img_array, verbose=0)[0]
+        # TFLite inference
+        interpreter.set_tensor(input_details[0]['index'], img_array)
+        interpreter.invoke()
+        predictions = interpreter.get_tensor(output_details[0]['index'])[0]
 
         results = []
         for name, prob in zip(CLASS_NAMES, predictions):
