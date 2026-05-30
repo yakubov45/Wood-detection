@@ -76,7 +76,7 @@ def predict():
         img_bytes = file.read()
         img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
         img = img.resize((224, 224))
-        img_array = np.array(img, dtype=np.float32) / 255.0
+        img_array = np.array(img, dtype=np.float32)  # Model ichida Rescaling(1/255) bor!
         img_array = np.expand_dims(img_array, axis=0)
 
         # Bashorat
