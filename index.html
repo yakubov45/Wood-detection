@@ -1,431 +1,275 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Yog'och Nuqson Aniqlovchi</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yog'och Nuqson Aniqlovchi</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0a0f1e;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    header {
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      border-bottom: 1px solid #334155;
+      padding: 1.2rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; color: #f1f5f9; }
+    header p { font-size: 0.8rem; color: #94a3b8; }
+    .container {
+      max-width: 1100px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    .card {
+      background: linear-gradient(145deg, #1e293b, #0f172a);
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 1.5rem;
+    }
+    .card h2 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #6366f1;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 1rem;
+      border-left: 3px solid #6366f1;
+      padding-left: 0.75rem;
+    }
+    .upload-area {
+      border: 2px dashed #334155;
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+    .upload-area:hover { border-color: #6366f1; background: rgba(99,102,241,0.05); }
+    .upload-area .icon { font-size: 2.5rem; }
+    .upload-area p { color: #94a3b8; font-size: 0.9rem; }
+    .upload-area small { color: #64748b; font-size: 0.75rem; }
+    #preview {
+      max-width: 100%;
+      max-height: 220px;
+      border-radius: 8px;
+      display: none;
+      object-fit: contain;
+    }
+    #fileInput { display: none; }
+    .btn {
+      width: 100%;
+      padding: 0.9rem;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #6366f1, #818cf8);
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 1rem;
+      transition: all 0.3s;
+      letter-spacing: 0.5px;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 25px rgba(99,102,241,0.4); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-  :root {
-    --bg:      #0a0c14;
-    --surface: #111420;
-    --card:    #161926;
-    --border:  #242840;
-    --primary: #6c63ff;
-    --accent:  #4fc3f7;
-    --success: #56cf6e;
-    --warn:    #ffd43b;
-    --danger:  #ff6b6b;
-    --text:    #e8eaf6;
-    --muted:   #7a85a3;
-  }
+    /* Natija */
+    .result-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 280px;
+      color: #475569;
+      gap: 0.5rem;
+    }
+    .result-empty .icon { font-size: 3rem; }
+    .result-label {
+      font-size: 0.8rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 0.5rem;
+    }
+    .top-result {
+      background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15));
+      border: 1px solid rgba(99,102,241,0.3);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .top-result .label { font-size: 0.75rem; color: #a78bfa; margin-bottom: 0.4rem; }
+    .top-result .name { font-size: 1.3rem; font-weight: 700; color: #f1f5f9; }
+    .top-result .conf {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #a78bfa;
+      margin-top: 0.25rem;
+    }
+    .bar-item { margin-bottom: 0.8rem; }
+    .bar-header { display: flex; justify-content: space-between; font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.3rem; }
+    .bar-track { background: #1e293b; border-radius: 4px; height: 6px; overflow: hidden; }
+    .bar-fill { height: 100%; background: linear-gradient(90deg, #6366f1, #a78bfa); border-radius: 4px; transition: width 0.8s ease; }
+    .bar-fill.top { background: linear-gradient(90deg, #6366f1, #818cf8); }
 
-  body {
-    font-family: 'Inter', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
+    .status {
+      text-align: center;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+    }
+    .status.loading { background: rgba(99,102,241,0.1); color: #a78bfa; }
+    .status.error { background: rgba(239,68,68,0.1); color: #f87171; }
 
-  /* ─── Header ─────────────────────────── */
-  header {
-    background: linear-gradient(135deg, #13162a 0%, #0a0c14 100%);
-    border-bottom: 1px solid var(--border);
-    padding: 18px 40px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    box-shadow: 0 4px 40px rgba(108,99,255,0.12);
-    position: sticky; top: 0; z-index: 100;
-  }
-  .header-info h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.3px; }
-  .header-info p  { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
-  .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-  .badge {
-    padding: 5px 14px; border-radius: 20px; font-size: 0.76rem; font-weight: 600;
-    background: rgba(108,99,255,0.15); border: 1px solid rgba(108,99,255,0.4);
-    color: #a5a0ff;
-  }
-  .badge.green {
-    background: rgba(86,207,110,0.15); border-color: rgba(86,207,110,0.4); color: var(--success);
-  }
-
-  /* ─── Main Layout ─────────────────────── */
-  main {
-    max-width: 1120px; margin: 0 auto;
-    padding: 36px 24px;
-    display: grid;
-    grid-template-columns: 440px 1fr;
-    gap: 24px;
-  }
-  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
-
-  /* ─── Cards ──────────────────────────── */
-  .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    padding: 28px;
-    box-shadow: 0 8px 40px rgba(0,0,0,0.35);
-  }
-  .card-title {
-    font-size: 0.85rem; font-weight: 600; color: var(--muted);
-    text-transform: uppercase; letter-spacing: 1px;
-    margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
-  }
-  .card-title::before {
-    content: ''; width: 3px; height: 14px;
-    background: var(--primary); border-radius: 2px;
-  }
-
-  /* ─── Drop Zone ──────────────────────── */
-  #drop-zone {
-    border: 2px dashed var(--border); border-radius: 14px;
-    padding: 44px 20px; text-align: center; cursor: pointer;
-    transition: all 0.3s ease;
-  }
-  #drop-zone:hover, #drop-zone.over {
-    border-color: var(--primary);
-    background: rgba(108,99,255,0.07);
-  }
-  .dz-icon { font-size: 2rem; margin-bottom: 12px; font-weight: bold; color: var(--primary); }
-  .dz-text { color: var(--muted); font-size: 0.88rem; line-height: 1.6; }
-  .dz-text b { color: var(--primary); }
-  #file-input { display: none; }
-
-  /* Preview */
-  #preview-wrap { display: none; margin-top: 18px; position: relative; border-radius: 12px; overflow: hidden; }
-  #preview-img  { width: 100%; max-height: 260px; object-fit: cover; display: block; }
-  .img-info-bar {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    background: linear-gradient(transparent, rgba(0,0,0,0.75));
-    padding: 12px 14px; font-size: 0.78rem; color: #ccc;
-  }
-
-  /* Predict Button */
-  #predict-btn {
-    margin-top: 18px; width: 100%; padding: 14px;
-    border: none; border-radius: 12px;
-    background: linear-gradient(135deg, var(--primary), #8b5cf6);
-    color: white; font-size: 0.95rem; font-weight: 600;
-    cursor: pointer; transition: all 0.3s ease;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    letter-spacing: 0.3px;
-  }
-  #predict-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 28px rgba(108,99,255,0.45);
-  }
-  #predict-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; }
-
-  /* ─── Results ─────────────────────────── */
-  .empty-state {
-    text-align: center; padding: 70px 20px; color: var(--muted);
-  }
-  .empty-state p { font-size: 0.88rem; line-height: 1.7; }
-
-  /* Top Prediction */
-  .top-pred {
-    background: linear-gradient(135deg, rgba(108,99,255,0.12), rgba(79,195,247,0.08));
-    border: 1px solid rgba(108,99,255,0.25);
-    border-radius: 14px; padding: 24px; text-align: center; margin-bottom: 24px;
-    animation: fadeUp 0.4s ease;
-  }
-  .top-pred .tp-label {
-    font-size: 1.8rem; font-weight: 700; letter-spacing: -0.5px;
-    background: linear-gradient(135deg, #fff, var(--accent));
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  }
-  .top-pred .tp-conf { font-size: 1rem; margin-top: 8px; font-weight: 600; }
-
-  /* Bars */
-  .prob-list { display: flex; flex-direction: column; gap: 12px; animation: fadeUp 0.5s ease; }
-  .prob-header { display: flex; justify-content: space-between; font-size: 0.83rem; margin-bottom: 6px; }
-  .prob-name { font-weight: 500; }
-  .prob-pct  { color: var(--muted); }
-  .bar-bg    { background: var(--surface); border-radius: 8px; height: 9px; overflow: hidden; }
-  .bar-fill  {
-    height: 100%; border-radius: 8px;
-    background: linear-gradient(90deg, var(--primary), var(--accent));
-    transition: width 0.9s cubic-bezier(0.4,0,0.2,1);
-  }
-  .bar-fill.top { background: linear-gradient(90deg, #56cf6e, #4fc3f7); }
-
-  /* ─── Animations ──────────────────────── */
-  @keyframes fadeUp {
-    from { opacity:0; transform: translateY(12px); }
-    to   { opacity:1; transform: none; }
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .spinner {
-    width: 18px; height: 18px;
-    border: 2.5px solid rgba(255,255,255,0.3);
-    border-top-color: white; border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-
-  /* ─── Footer ──────────────────────────── */
-  footer {
-    text-align: center; padding: 24px;
-    color: var(--muted); font-size: 0.76rem;
-    border-top: 1px solid var(--border);
-  }
-</style>
+    @media (max-width: 768px) { .container { grid-template-columns: 1fr; } }
+    footer { text-align: center; padding: 2rem; color: #334155; font-size: 0.8rem; }
+  </style>
 </head>
 <body>
-
 <header>
-  <div class="header-info">
-    <h1>Yog'och Nuqson Aniqlovchi</h1>
-    <p>Avtomatlashtirilgan Klassifikatsiya Tizimi</p>
+  <div>
+    <h1>🌲 Yog'och Nuqson Aniqlovchi</h1>
+    <p>Avtomatlashtirilgan Klassifikatsiya Tizimi · EfficientNet-B0</p>
   </div>
 </header>
 
-<main>
-  <!-- ── Chap: Upload ─── -->
-  <div>
-    <div class="card">
-      <div class="card-title">Rasm yuklash</div>
-
-      <div id="drop-zone" onclick="document.getElementById('file-input').click()">
-        <div class="dz-icon">+</div>
-        <div class="dz-text">
-          Rasmni tanlash uchun shu yerni bosing<br>
-          <span style="font-size:0.78rem;opacity:0.7;">JPG · PNG · WEBP · BMP</span>
-        </div>
-        <input type="file" id="file-input" accept="image/*"
-               onchange="handleFile(this.files[0])"
-               style="display:none;">
-      </div>
-
-      <div id="preview-wrap">
-        <img id="preview-img" src="" alt="Preview">
-        <div class="img-info-bar" id="img-info"></div>
-      </div>
-
-      <button id="predict-btn" disabled onclick="predict()">
-        <span id="btn-text">Tahlil qilish</span>
-      </button>
+<div class="container">
+  <!-- Yuklash paneli -->
+  <div class="card">
+    <h2>Rasm Yuklash</h2>
+    <div class="upload-area" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">📷</div>
+      <img id="preview" alt="Preview">
+      <p id="uploadText">Rasmni tanlash uchun shu yerni bosing</p>
+      <small>JPG · PNG · WEBP · BMP</small>
     </div>
+    <input type="file" id="fileInput" accept="image/*">
+    <button class="btn" id="analyzeBtn" onclick="analyze()" disabled>Tahlil qilish</button>
+    <div id="status"></div>
   </div>
 
-  <!-- ── O'ng: Natija ─── -->
-  <div class="card" id="result-card">
-    <div class="card-title">Bashorat natijasi</div>
-    <div id="result-content">
-      <div class="empty-state">
-        <p>Chap tomonda rasm yuklang<br>va <b style="color:var(--primary);">Tahlil qilish</b> tugmasini bosing</p>
-      </div>
+  <!-- Natija paneli -->
+  <div class="card">
+    <h2>Bashorat Natijasi</h2>
+    <div id="resultEmpty" class="result-empty">
+      <div class="icon">🔍</div>
+      <p>Rasm yuklang va tahlil qiling</p>
     </div>
-    <div id="heatmap-wrap" style="display:none; margin-top:20px; border-top:1px solid var(--border); padding-top:20px;">
-      <div class="card-title">Grad-CAM Tahlili</div>
-      <canvas id="heatmap-canvas" style="width:100%; border-radius:12px; border:1px solid var(--border);"></canvas>
-      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:0.7rem;color:var(--muted);">
-        <span>Kam ahamiyatli</span><span>Ko'p ahamiyatli</span>
+    <div id="resultContent" style="display:none">
+      <div class="top-result">
+        <div class="label">Asosiy natija</div>
+        <div class="name" id="topClass">—</div>
+        <div class="conf" id="topConf">—</div>
       </div>
+      <div class="result-label">Barcha kategoriyalar</div>
+      <div id="allBars"></div>
     </div>
   </div>
-</main>
+</div>
 
-<footer>
-  Wood Defect Classification System
-</footer>
+<footer>Wood Defect Classification System · EfficientNet-B0</footer>
 
 <script>
-// ── Sozlamalar ────────────────────────────────────────
-const MODEL_URL = './tfjs_model/model.json';
-const IMG_SIZE  = 224;
-const CLASS_NAMES = [
-  { en: 'Crack',           uz: 'Yoriq'           },
-  { en: 'Dead_Knot',       uz: "O'lik tugun"     },
-  { en: 'Live_Knot',       uz: 'Tirik tugun'     },
-  { en: 'knot_with_crack', uz: 'Yoriqli tugun'   },
-  { en: 'resin',           uz: 'Qatron (Smola)'  },
-  { en: 'unknown',         uz: 'Toza taxta'       },
-];
+  const fileInput = document.getElementById('fileInput');
+  const preview   = document.getElementById('preview');
+  const uploadText = document.getElementById('uploadText');
+  const analyzeBtn = document.getElementById('analyzeBtn');
 
-let model = null;
-let currentImg = null;
+  fileInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    preview.src = url;
+    preview.style.display = 'block';
+    uploadText.style.display = 'none';
+    analyzeBtn.disabled = false;
+    document.getElementById('resultEmpty').style.display = 'flex';
+    document.getElementById('resultContent').style.display = 'none';
+    document.getElementById('status').innerHTML = '';
+  });
 
-const previewImg  = document.getElementById('preview-img');
-const previewWrap = document.getElementById('preview-wrap');
-const predictBtn  = document.getElementById('predict-btn');
-const imgInfo     = document.getElementById('img-info');
-
-// ── Model yuklash ─────────────────────────────────────
-async function loadModel() {
-  try {
-    model = await tf.loadLayersModel(MODEL_URL);
-    // Warm-up
-    const dummy = tf.zeros([1, IMG_SIZE, IMG_SIZE, 3]);
-    model.predict(dummy).dispose();
-    dummy.dispose();
-    console.log('Model tayyor!');
-  } catch(e) {
-    console.error('Model yuklanmadi:', e);
-    document.getElementById('result-content').innerHTML =
-      '<div class="empty-state"><p style="color:var(--danger)">Model yuklanmadi. tfjs_model/ papkasini tekshiring.</p></div>';
-  }
-}
-
-// ── Rasm yuklash ──────────────────────────────────────
-function handleFile(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    previewImg.src = ev.target.result;
-    previewImg.onload = () => { currentImg = previewImg; };
-    previewWrap.style.display = 'block';
-    imgInfo.textContent = file.name + '  •  ' + (file.size/1024).toFixed(1) + ' KB';
-    predictBtn.disabled = false;
-  };
-  reader.readAsDataURL(file);
-  document.getElementById('result-content').innerHTML =
-    '<div class="empty-state"><p>Rasm yuklandi. Tahlil qilishga tayyor!</p></div>';
-  document.getElementById('heatmap-wrap').style.display = 'none';
-}
-
-// ── Tahlil ───────────────────────────────────────────
-async function predict() {
-  if (!model || !currentImg) return;
-  predictBtn.disabled = true;
-  document.getElementById('btn-text').innerHTML =
-    '<div class="spinner"></div>&nbsp;Tahlil qilinmoqda...';
-
-  try {
-    const tensor = tf.browser.fromPixels(currentImg)
-      .resizeBilinear([IMG_SIZE, IMG_SIZE])
-      .toFloat()
-      .expandDims(0);
-
-    const preds = model.predict(tensor);
-    const probs = await preds.data();
-    tensor.dispose();
-    preds.dispose();
-
-    const results = CLASS_NAMES.map((cls, i) => ({
-      label: cls.uz,
-      prob:  probs[i] || 0
-    })).sort((a, b) => b.prob - a.prob);
-
-    showResult(results);
-    await showGradCam(currentImg);
-
-  } catch(e) {
-    document.getElementById('result-content').innerHTML =
-      `<div class="empty-state"><p>Xato: ${e.message}</p></div>`;
-    console.error(e);
-  }
-
-  predictBtn.disabled = false;
-  document.getElementById('btn-text').textContent = 'Tahlil qilish';
-}
-
-// ── Natijalarni ko'rsatish ───────────────────────────
-function showResult(results) {
-  const top   = results[0];
-  const pct   = (top.prob * 100).toFixed(1);
-  const color = top.prob > 0.75 ? 'var(--success)'
-              : top.prob > 0.5  ? 'var(--warn)' : 'var(--danger)';
-
-  const bars = results.map((r, i) => {
-    const pp = (r.prob * 100).toFixed(1);
-    return `
-      <div class="prob-item">
-        <div class="prob-header">
-          <span class="prob-name">${r.label}</span>
-          <span class="prob-pct">${pp}%</span>
-        </div>
-        <div class="bar-bg">
-          <div class="bar-fill ${i===0?'top':''}" style="width:${pp}%"></div>
-        </div>
-      </div>`;
-  }).join('');
-
-  document.getElementById('result-content').innerHTML = `
-    <div class="top-pred">
-      <div class="tp-label">${top.label}</div>
-      <div class="tp-conf" style="color:${color}">Ishonch darajasi: ${pct}%</div>
-    </div>
-    <div class="prob-list">${bars}</div>`;
-}
-
-// ── Grad-CAM ─────────────────────────────────────────
-async function showGradCam(imgEl) {
-  try {
-    // Ichki EfficientNet modelini topish
-    const inner = model.layers.find(l => l.layers && l.layers.length > 10) || model;
-
-    // So'nggi Conv2D qatlamini topish
-    let convLayer = null;
-    for (let i = inner.layers.length - 1; i >= 0; i--) {
-      if (inner.layers[i].getClassName() === 'Conv2D') {
-        convLayer = inner.layers[i]; break;
-      }
+  // Drag & drop
+  const dropZone = document.getElementById('dropZone');
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#6366f1'; });
+  dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#334155'; });
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.style.borderColor = '#334155';
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      fileInput.files = e.dataTransfer.files;
+      fileInput.dispatchEvent(new Event('change'));
     }
-    if (!convLayer) return;
+  });
 
-    const gradModel = tf.model({
-      inputs:  model.inputs,
-      outputs: [convLayer.output, model.output]
-    });
+  async function analyze() {
+    const file = fileInput.files[0];
+    if (!file) return;
 
-    const imgT = tf.browser.fromPixels(imgEl)
-      .resizeBilinear([IMG_SIZE, IMG_SIZE]).toFloat().expandDims(0);
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = 'Tahlil qilinmoqda...';
+    document.getElementById('status').innerHTML =
+      '<div class="status loading">⏳ Model tahlil qilmoqda...</div>';
 
-    let convOut, preds;
-    const grads = tf.variableGrads(() => {
-      const [co, pr] = gradModel.predict(imgT);
-      convOut = co; preds = pr;
-      const topIdx = pr.argMax(1).dataSync()[0];
-      return pr.slice([0, topIdx], [1, 1]).squeeze();
-    });
+    const formData = new FormData();
+    formData.append('file', file);
 
-    const pooled = tf.tidy(() =>
-      tf.sum(grads.grads[Object.keys(grads.grads)[0]], [0, 1, 2])
-    );
+    try {
+      const res = await fetch('/predict', { method: 'POST', body: formData });
+      const data = await res.json();
 
-    const heatmap = tf.tidy(() => {
-      const weighted = convOut.squeeze().mul(pooled);
-      const cam = weighted.sum(-1).relu();
-      const maxVal = cam.max().add(1e-7);
-      return cam.div(maxVal);
-    });
+      if (data.error) throw new Error(data.error);
 
-    // Canvas ga chizish
-    const canvas = document.getElementById('heatmap-canvas');
-    const W = imgEl.naturalWidth || 224;
-    const H = imgEl.naturalHeight || 224;
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(imgEl, 0, 0, W, H);
+      // Natijani ko'rsatish
+      document.getElementById('resultEmpty').style.display = 'none';
+      document.getElementById('resultContent').style.display = 'block';
+      document.getElementById('topClass').textContent = data.prediction;
+      document.getElementById('topConf').textContent = data.confidence.toFixed(1) + '%';
 
-    const hData = await heatmap.resizeBilinear([H, W]).data();
-    const imgData = ctx.getImageData(0, 0, W, H);
-    for (let i = 0; i < hData.length; i++) {
-      const v = hData[i];
-      const r = Math.round(255 * Math.min(1, Math.max(0, 4*v - 1.5)));
-      const g = Math.round(255 * Math.min(1, Math.max(0, 4*Math.abs(v-0.5) - 0.5)));
-      const b = Math.round(255 * Math.min(1, Math.max(0, -4*v + 1.5)));
-      imgData.data[i*4]   = Math.round(imgData.data[i*4]   * 0.55 + r * 0.45);
-      imgData.data[i*4+1] = Math.round(imgData.data[i*4+1] * 0.55 + g * 0.45);
-      imgData.data[i*4+2] = Math.round(imgData.data[i*4+2] * 0.55 + b * 0.45);
+      // Barlar
+      const barsDiv = document.getElementById('allBars');
+      barsDiv.innerHTML = '';
+      data.all_results.forEach((r, i) => {
+        const isTop = i === 0;
+        barsDiv.innerHTML += `
+          <div class="bar-item">
+            <div class="bar-header">
+              <span>${r.class}</span>
+              <span>${r.percentage}%</span>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill ${isTop ? 'top' : ''}" style="width:${r.percentage}%"></div>
+            </div>
+          </div>`;
+      });
+
+      document.getElementById('status').innerHTML = '';
+    } catch (err) {
+      document.getElementById('status').innerHTML =
+        `<div class="status error">❌ Xato: ${err.message}</div>`;
+    } finally {
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = 'Tahlil qilish';
     }
-    ctx.putImageData(imgData, 0, 0);
-
-    [convOut, preds, heatmap, pooled, imgT].forEach(t => t && t.dispose());
-
-    document.getElementById('heatmap-wrap').style.display = 'block';
-  } catch(e) {
-    console.log('Grad-CAM:', e.message);
   }
-}
-
-loadModel();
 </script>
 </body>
 </html>
