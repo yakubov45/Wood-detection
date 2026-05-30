@@ -1,18 +1,22 @@
 {
   "version": 2,
   "name": "yogoch-nuqson-aniqlovchi",
-  "builds": [
-    {
-      "src": "index.html",
-      "use": "@vercel/static"
-    }
-  ],
   "routes": [
     {
-      "src": "/tfjs_model/(.*)",
-      "dest": "/tfjs_model/$1",
+      "src": "/tfjs_model/(.+)\\.bin",
+      "dest": "/tfjs_model/$1.bin",
       "headers": {
-        "Cache-Control": "public, max-age=86400",
+        "Content-Type": "application/octet-stream",
+        "Cache-Control": "public, max-age=604800",
+        "Access-Control-Allow-Origin": "*"
+      }
+    },
+    {
+      "src": "/tfjs_model/(.+)\\.json",
+      "dest": "/tfjs_model/$1.json",
+      "headers": {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=604800",
         "Access-Control-Allow-Origin": "*"
       }
     },
