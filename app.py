@@ -1,120 +1,112 @@
-import os
-import io
-import gc
-import traceback
+import gradio as gr
 import numpy as np
-from flask import Flask, request, jsonify, send_from_directory
+import tensorflow as tf
+import gc
+import os
 
-app = Flask(__name__, static_folder='.')
+# ── Model yuklash ──────────────────────────────────────────────────────────────
+print("Model yuklanmoqda...")
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+tf.config.set_visible_devices([], 'GPU')
+tf.config.threading.set_inter_op_parallelism_threads(1)
+tf.config.threading.set_intra_op_parallelism_threads(1)
 
-# ─── Keras Model startup da yuklanadi ─────────────────────────────────────────
-model = None
-model_error = None
+model = tf.keras.models.load_model('best_finetuned_fixed.keras', compile=False)
+# Warm-up
+model.predict(np.zeros((1, 224, 224, 3), dtype=np.float32), verbose=0)
+print("✅ Model tayyor!")
 
-def init_model():
-    global model, model_error
-    try:
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        import tensorflow as tf
-        # RAM tejash: 1 thread, GPU yo'q
-        tf.config.set_visible_devices([], 'GPU')
-        tf.config.threading.set_inter_op_parallelism_threads(1)
-        tf.config.threading.set_intra_op_parallelism_threads(1)
+CLASS_NAMES = ['Crack', 'Knot', 'Knot with Crack', 'Quartzite', 'Resin', 'Normal']
 
-        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'best_finetuned_fixed.keras')
-        print(f"Model path: {model_path}")
-        print(f"Fayl bor: {os.path.exists(model_path)}")
+CLASS_INFO = {
+    'Crack':          ('🔴', 'Yog\'och yuzasidagi yoriq — sinish xavfi bor'),
+    'Knot':           ('🟠', 'Shox joyi — strukturaviy zaiflik'),
+    'Knot with Crack':('🔴', 'Tugunli yoriq — jiddiy nuqson'),
+    'Quartzite':      ('🟡', 'Mineral inklyuziya — qurilishda cheklangan'),
+    'Resin':          ('🟡', 'Qatron oqishi — estetik nuqson'),
+    'Normal':         ('🟢', 'Sog\'lom yog\'och — nuqson aniqlanmadi'),
+}
 
-        model = tf.keras.models.load_model(model_path, compile=False)
-        # Bitta test prediction — model issiq bo'lsin
-        dummy = np.zeros((1, 224, 224, 3), dtype=np.float32)
-        model.predict(dummy, verbose=0)
-        print("✅ Model tayyor!")
-    except Exception as e:
-        model_error = str(e)
-        print(f"❌ Model xatosi: {e}")
-        traceback.print_exc()
+# ── Bashorat funksiyasi ────────────────────────────────────────────────────────
+def predict(image):
+    if image is None:
+        return None, "Rasm yuklanmadi"
 
-print("=" * 50)
-print("Keras model yuklanmoqda...")
-init_model()
-print("=" * 50)
+    from PIL import Image as PILImage
+    img = PILImage.fromarray(image).convert('RGB').resize((224, 224))
+    arr = np.array(img, dtype=np.float32)
+    preds = model.predict(arr[None], verbose=0)[0]
+    gc.collect()
 
-# ─── Kategoriyalar ────────────────────────────────────────────────────────────
-CLASS_NAMES = [
-    'Crack',
-    'Knot',
-    'Knot with Crack',
-    'Quartzite',
-    'Resin',
-    'Normal'
-]
+    # Label dict for Gradio Label component
+    label_dict = {CLASS_NAMES[i]: float(preds[i]) for i in range(len(CLASS_NAMES))}
 
-# ─── Routes ───────────────────────────────────────────────────────────────────
-@app.route('/')
-def index():
-    return send_from_directory('.', 'index.html')
+    top_class = CLASS_NAMES[int(np.argmax(preds))]
+    emoji, desc = CLASS_INFO[top_class]
+    confidence = float(np.max(preds)) * 100
+    info_text = f"{emoji} **{top_class}** — {confidence:.1f}% ishonch\n\n_{desc}_"
 
-@app.route('/health')
-def health():
-    return jsonify({
-        'status': 'ok' if model else 'error',
-        'model_loaded': model is not None,
-        'error': model_error
-    })
+    return label_dict, info_text
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    if model is None:
-        return jsonify({'success': False, 'error': f'Model yuklanmadi: {model_error}'}), 500
+# ── Gradio interfeysi ──────────────────────────────────────────────────────────
+with gr.Blocks(
+    theme=gr.themes.Base(
+        primary_hue="indigo",
+        secondary_hue="purple",
+        neutral_hue="slate",
+    ),
+    title="Wood Defect Classifier",
+    css="""
+        .gradio-container { max-width: 1000px !important; }
+        footer { display: none !important; }
+    """
+) as demo:
 
-    if 'file' not in request.files:
-        return jsonify({'success': False, 'error': 'Fayl topilmadi'}), 400
+    gr.Markdown("""
+    # 🌲 Wood Defect Classifier
+    **EfficientNet-B0** asosidagi yog'och nuqson aniqlovchi tizim.
+    Rasmni yuklang yoki namuna rasmlardan birini tanlang.
+    """)
 
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'success': False, 'error': 'Fayl tanlanmadi'}), 400
+    with gr.Row():
+        with gr.Column(scale=1):
+            image_input = gr.Image(
+                label="Yog'och rasmi",
+                type="numpy",
+                height=300,
+            )
+            analyze_btn = gr.Button("🔍 Tahlil qilish", variant="primary", size="lg")
 
-    try:
-        from PIL import Image
+        with gr.Column(scale=1):
+            label_output = gr.Label(
+                label="Kategoriyalar bo'yicha ehtimollik",
+                num_top_classes=6,
+            )
+            info_output = gr.Markdown(label="Natija")
 
-        # Model ichida Rescaling(1/255) bor → raw [0-255] yuboramiz
-        img = Image.open(io.BytesIO(file.read())).convert('RGB')
-        img = img.resize((224, 224))
-        img_array = np.array(img, dtype=np.float32)
-        img_array = np.expand_dims(img_array, axis=0)
+    # Namuna rasmlar
+    examples_path = "examples"
+    if os.path.exists(examples_path):
+        example_files = [os.path.join(examples_path, f)
+                         for f in os.listdir(examples_path)
+                         if f.lower().endswith(('.jpg','.png','.jpeg'))]
+        if example_files:
+            gr.Examples(
+                examples=example_files,
+                inputs=image_input,
+                label="Namuna rasmlar"
+            )
 
-        predictions = model.predict(img_array, verbose=0)[0]
-        gc.collect()  # Intermediate tensorlarni tozalash
+    analyze_btn.click(
+        fn=predict,
+        inputs=image_input,
+        outputs=[label_output, info_output],
+    )
 
-        results = []
-        for name, prob in zip(CLASS_NAMES, predictions):
-            results.append({
-                'class': name,
-                'probability': float(prob),
-                'percentage': round(float(prob) * 100, 1)
-            })
-        results.sort(key=lambda x: x['probability'], reverse=True)
+    gr.Markdown("""
+    ---
+    *Model: EfficientNet-B0 · 6 kategoriya · TensorFlow 2.16*
+    """)
 
-        return jsonify({
-            'success': True,
-            'prediction': results[0]['class'],
-            'confidence': results[0]['percentage'],
-            'all_results': results
-        })
-
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.errorhandler(404)
-def not_found(e):
-    return jsonify({'success': False, 'error': 'Not found'}), 404
-
-@app.errorhandler(500)
-def server_error(e):
-    return jsonify({'success': False, 'error': str(e)}), 500
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+if __name__ == "__main__":
+    demo.launch()

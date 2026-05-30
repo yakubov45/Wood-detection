@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: wood-defect-classifier
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --timeout 180 --workers 1 --preload --worker-class sync
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
