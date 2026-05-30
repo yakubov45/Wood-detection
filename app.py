@@ -6,32 +6,33 @@ from flask import Flask, request, jsonify, send_from_directory
 
 app = Flask(__name__, static_folder='.')
 
-# ─── TFLite Model ─────────────────────────────────────────────────────────────
-interpreter = None
-input_details = None
-output_details = None
+# ─── Keras Model startup da yuklanadi ─────────────────────────────────────────
+model = None
 model_error = None
 
 def init_model():
-    global interpreter, input_details, output_details, model_error
+    global model, model_error
     try:
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
         import tensorflow as tf
-        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model.tflite')
-        print(f"TFLite model: {model_path}")
+        tf.config.set_visible_devices([], 'GPU')  # CPU only, GPU yo'q
+
+        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'best_finetuned_fixed.keras')
+        print(f"Model path: {model_path}")
         print(f"Fayl bor: {os.path.exists(model_path)}")
 
-        interpreter = tf.lite.Interpreter(model_path=model_path)
-        interpreter.allocate_tensors()
-        input_details  = interpreter.get_input_details()
-        output_details = interpreter.get_output_details()
-        print(f"✅ TFLite yuklandi! Input: {input_details[0]['shape']}")
+        model = tf.keras.models.load_model(model_path, compile=False)
+        # Bitta test prediction — model issiq bo'lsin
+        dummy = np.zeros((1, 224, 224, 3), dtype=np.float32)
+        model.predict(dummy, verbose=0)
+        print("✅ Model tayyor!")
     except Exception as e:
         model_error = str(e)
         print(f"❌ Model xatosi: {e}")
         traceback.print_exc()
 
 print("=" * 50)
-print("TFLite model yuklanmoqda...")
+print("Keras model yuklanmoqda...")
 init_model()
 print("=" * 50)
 
@@ -53,14 +54,14 @@ def index():
 @app.route('/health')
 def health():
     return jsonify({
-        'status': 'ok' if interpreter else 'error',
-        'model_loaded': interpreter is not None,
+        'status': 'ok' if model else 'error',
+        'model_loaded': model is not None,
         'error': model_error
     })
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    if interpreter is None:
+    if model is None:
         return jsonify({'success': False, 'error': f'Model yuklanmadi: {model_error}'}), 500
 
     if 'file' not in request.files:
@@ -73,16 +74,13 @@ def predict():
     try:
         from PIL import Image
 
-        # Preprocessing — model ichida Rescaling(1/255) bor
+        # Model ichida Rescaling(1/255) bor → raw [0-255] yuboramiz
         img = Image.open(io.BytesIO(file.read())).convert('RGB')
         img = img.resize((224, 224))
-        img_array = np.array(img, dtype=np.float32)  # Raw [0-255]
+        img_array = np.array(img, dtype=np.float32)
         img_array = np.expand_dims(img_array, axis=0)
 
-        # TFLite inference
-        interpreter.set_tensor(input_details[0]['index'], img_array)
-        interpreter.invoke()
-        predictions = interpreter.get_tensor(output_details[0]['index'])[0]
+        predictions = model.predict(img_array, verbose=0)[0]
 
         results = []
         for name, prob in zip(CLASS_NAMES, predictions):
